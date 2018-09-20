@@ -2,54 +2,53 @@
 // Descricao do projeto
 
 
-// Portas:
-// LCD: Analógica 4 e 5
-// Cooler: Digital 7 (representado por LED Vermelho)
-// Sensor Temperatura: Digital 3
-// Botao Backlight: 2
-// AD0: Sensor DC Placa Solar
-// AD1: Sensor AC Rede
-// Rele CARGA: Digital 6
-// Rele Carregamento: Digital 4 IN1 e Digital 5 IN2
+// BIBLIOTECAS
+#include <Adafruit_ADS1015.h>  // Conversor AD
+#include <Wire.h>              //
+#include <LiquidCrystal_I2C.h> // LCD I2C
+#include <OneWire.h>           // Comunicacao Sensor de Temperatura
+#include <DallasTemperature.h> // Sensor de Temperatura
 
 
-// BIBLIOTECAS UTILIZADAS
-// Conversor AD
-#include <Adafruit_ADS1015.h>
+// DEFINICOES I/O
+// DIGITAIS
+#define BUTTON 2
+#define SENSOR_TEMPERATURA 3
+#define RELE_CARREGAMENTOPLACA 4
+#define RELE_CARREGAMENTOREDE 5
+#define RELE_CARGA 6
+#define RELE_EXAUSTOR 7
 
-// 
-#include <Wire.h>
+// ANALOGICAS
 
-// LCD I2C
-#include <LiquidCrystal_I2C.h>
+
+// ENDERECOS I2C
+#define LCD_ADD 0x3f
+#define CONVERSORAD_ADD 0x48
+
 
 // Sensor de Temperatura
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
-// DEFINIÇÕES
-// Porta do pino de sinal do DS18B20
-#define ONE_WIRE_BUS 3
- 
 // Define uma instancia do oneWire para comunicacao com o sensor
-OneWire oneWire(ONE_WIRE_BUS);
- 
+OneWire oneWire(SENSOR_TEMPERATURA);
 // Armazena temperaturas minima e maxima
 float tempMin = 999;
 float tempMax = 0;
-
-// Define valor do botao
-int buttonState = 0;
- 
+float tempC = 0;
 DallasTemperature sensors(&oneWire);
 DeviceAddress sensor1;
 
+// Botao LCD
+// Define valor do botao
+int buttonState = 0;
+
 // Inicializa o display no endereco 0x27
-LiquidCrystal_I2C lcd(0x3f,2,1,0,4,5,6,7,3, POSITIVE);
+LiquidCrystal_I2C lcd(LCD_ADD,2,1,0,4,5,6,7,3, POSITIVE);
 
 // Endereco Conversor AD
-Adafruit_ADS1115 ads(0x48);
-float ad0, ad1, ad2, ad3, anag = 0.0;
+Adafruit_ADS1115 ads(CONVERSORAD_ADD);
+
+// Variaveis para conversao AD
+float ad0, ad1, ad2, ad3, anlgc = 0.0;
 int16_t adc0, adc1, adc2, adc3, analogica;
  
 void setup(void) {
@@ -58,7 +57,7 @@ void setup(void) {
   // Sensor de temperatura
   sensors.begin();
 
-  // Conversor AD (+4 portas)
+  // Conversor AD
   ads.begin();
   
   // Localiza e mostra enderecos dos sensores
@@ -76,18 +75,11 @@ void setup(void) {
   Serial.println();
   lcd.begin(16, 2);
 
-  // inicializa o pino 2 do botao como entrada:
-  pinMode(2, INPUT);
-
-  // Rele de carga
-  pinMode(4, OUTPUT);
-  pinMode(5, OUTPUT);
-  pinMode(6, OUTPUT);
-  
-  // inicializa pino 4 do COOLER (representado com LED) como saída
-  pinMode(7, OUTPUT);
-
-  analogica = analogRead(0);
+  pinMode(BUTTON, INPUT);
+  pinMode(RELE_CARREGAMENTOPLACA, OUTPUT);
+  pinMode(RELE_CARREGAMENTOREDE, OUTPUT);
+  pinMode(RELE_CARGA, OUTPUT);
+  pinMode(RELE_EXAUSTOR, OUTPUT);
 }
  
 void mostra_endereco_sensor(DeviceAddress deviceAddress) {
@@ -100,7 +92,7 @@ void mostra_endereco_sensor(DeviceAddress deviceAddress) {
 
 void carga() {
   // Leitura tensao da placa DC e compara com valor fixo (18V)
-  if (ad0 >= 2.5 || analogica < 0.8) {
+  if (ad0 >= 2.5 || anlgc < 0.15) {
     digitalWrite(6, HIGH);
   } else {
     digitalWrite(6, LOW);
@@ -110,11 +102,11 @@ void carga() {
 void carregamentoBateria() {
   // Carregamento da bateria Se tensao placa menor que 12,5 carrega pela rede
   if (ad0 >= 2.5) {
-    digitalWrite(4, LOW); // (IN1)
-    digitalWrite(5, HIGH);// (IN2)
+    digitalWrite(RELE_CARREGAMENTOPLACA, LOW);
+    digitalWrite(RELE_CARREGAMENTOREDE, HIGH);
   } else {
-    digitalWrite(5, LOW);
-    digitalWrite(4, HIGH);
+    digitalWrite(RELE_CARREGAMENTOREDE, LOW);
+    digitalWrite(RELE_CARREGAMENTOPLACA, HIGH);
   }
 }
 
@@ -122,13 +114,14 @@ void lcdBacklight() {
   // Acende e apaga backlight do LCD
   // Acao do botao para Backlight
   lcd.setBacklight(LOW);
+  
   // faz a leitura do valor do botao
-  buttonState = digitalRead(2);
-  // verifica se o botao esta pressionado.
+  buttonState = digitalRead(BUTTON);
+  
+  // verifica se o botao esta pressionado
   if (buttonState == HIGH) {
     lcd.setBacklight(HIGH);
-  }
-  else {
+  } else {
     lcd.setBacklight(LOW);
   }
 }
@@ -136,7 +129,7 @@ void lcdBacklight() {
 void temperatura() {
   // Le a informacao do sensor
   sensors.requestTemperatures();
-  float tempC = sensors.getTempC(sensor1);
+  tempC = sensors.getTempC(sensor1);
   // Atualiza temperaturas minima e maxima
   if (tempC < tempMin) {
     tempMin = tempC;
@@ -187,12 +180,14 @@ void loop() {
   adc1 = ads.readADC_SingleEnded(1);
   adc2 = ads.readADC_SingleEnded(2);
   adc3 = ads.readADC_SingleEnded(3);
+
+  analogica = analogRead(0);
+  anlgc = analogica * (5.0 / 1023.0);
   
   ad0 = (adc0 * 0.1875)/1000;
   ad1 = (adc1 * 0.1875)/1000;
   ad2 = (adc2 * 0.1875)/1000;
   ad3 = (adc3 * 0.1875)/1000;
-  anag = 
   
   carga();
   carregamentoBateria();
@@ -225,14 +220,12 @@ void loop() {
   Serial.print("ANAG: ");
   Serial.print(analogica);
   Serial.print("\tVoltage: ");
-  Serial.println(adc3, 7);
+  Serial.println(anlgc, 7);
   Serial.println();
   
   carga();
 
   carregamentoBateria();
-
-  carga();
 
   carga();
 }
