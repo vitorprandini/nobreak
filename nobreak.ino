@@ -12,45 +12,46 @@
 
 // DEFINICOES I/O
 // DIGITAIS
-#define BUTTON 2
-#define SENSOR_TEMPERATURA 3
-#define RELE_CARREGAMENTOPLACA 4
-#define RELE_CARREGAMENTOREDE 5
-#define RELE_CARGA 6
-#define RELE_EXAUSTOR 7
+#define BOTAO                 2 // In
+#define SENSOR_TEMPERATURA     3 // In
+#define RELE_CARREGAMENTOPLACA 4 // Out
+#define RELE_CARREGAMENTOREDE  5 // Out
+#define RELE_CARGA             6 // Out
+#define RELE_EXAUSTOR          7 // Out
 
 // ANALOGICAS
+#define SENSORAC_REDE          0
+#define SENSORAC_CARGA         1
+#define SENSORDC_BATERIA       2
+#define SENSORDC_PLACASOLAR    3
 
 
 // ENDERECOS I2C
 #define LCD_ADD 0x3f
 #define CONVERSORAD_ADD 0x48
 
-
-// Sensor de Temperatura
-// Define uma instancia do oneWire para comunicacao com o sensor
-OneWire oneWire(SENSOR_TEMPERATURA);
-// Armazena temperaturas minima e maxima
+// VARIAVEIS
 float tempMin = 999;
 float tempMax = 0;
 float tempC = 0;
-DallasTemperature sensors(&oneWire);
-DeviceAddress sensor1;
 
-// Botao LCD
-// Define valor do botao
-int buttonState = 0;
 
-// Inicializa o display no endereco 0x27
-LiquidCrystal_I2C lcd(LCD_ADD,2,1,0,4,5,6,7,3, POSITIVE);
+int buttonState = 0; // Integra ate quatro
 
-// Endereco Conversor AD
-Adafruit_ADS1115 ads(CONVERSORAD_ADD);
 
 // Variaveis para conversao AD
-float ad0, ad1, ad2, ad3, anlgc = 0.0;
-int16_t adc0, adc1, adc2, adc3, analogica;
- 
+int16_t adc0, adc1, adc2, adc3;
+float sensorAcRede, sensorAcCarga, sensorDcBateria, sensorDcPlacaSolar = 0.0;
+
+
+// INICIALIZACAO
+LiquidCrystal_I2C lcd(LCD_ADD,2,1,0,4,5,6,7,3, POSITIVE); // LCD
+Adafruit_ADS1115 ads(CONVERSORAD_ADD);                    // Conversor AD
+OneWire oneWire(SENSOR_TEMPERATURA);                      // Protocolo de comunicacao sensor de temperatura
+DallasTemperature sensors(&oneWire);                      // Sensor de temperatura
+DeviceAddress sensor1;                                    // Endereco sensor de temperatura
+
+
 void setup(void) {
   Serial.begin(9600);
 
@@ -75,7 +76,7 @@ void setup(void) {
   Serial.println();
   lcd.begin(16, 2);
 
-  pinMode(BUTTON, INPUT);
+  pinMode(BOTAO, INPUT);
   pinMode(RELE_CARREGAMENTOPLACA, OUTPUT);
   pinMode(RELE_CARREGAMENTOREDE, OUTPUT);
   pinMode(RELE_CARGA, OUTPUT);
@@ -92,7 +93,7 @@ void mostra_endereco_sensor(DeviceAddress deviceAddress) {
 
 void carga() {
   // Leitura tensao da placa DC e compara com valor fixo (18V)
-  if (ad0 >= 2.5 || anlgc < 0.15) {
+  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
     digitalWrite(6, HIGH);
   } else {
     digitalWrite(6, LOW);
@@ -100,8 +101,8 @@ void carga() {
 }
 
 void carregamentoBateria() {
-  // Carregamento da bateria Se tensao placa menor que 12,5 carrega pela rede
-  if (ad0 >= 2.5) {
+  // Carregamento da bateria Se tensao placa menor que XXXXX carrega pela rede
+  if (sensorDcPlacaSolar >= 2.5) {
     digitalWrite(RELE_CARREGAMENTOPLACA, LOW);
     digitalWrite(RELE_CARREGAMENTOREDE, HIGH);
   } else {
@@ -116,7 +117,7 @@ void lcdBacklight() {
   lcd.setBacklight(LOW);
   
   // faz a leitura do valor do botao
-  buttonState = digitalRead(BUTTON);
+  buttonState = digitalRead(BOTAO);
   
   // verifica se o botao esta pressionado
   if (buttonState == HIGH) {
@@ -175,19 +176,17 @@ void temperatura() {
 }
 
 void loop() {
-  // we read from the ADC, we have a sixteen bit integer as a result
-  adc0 = ads.readADC_SingleEnded(0);
-  adc1 = ads.readADC_SingleEnded(1);
-  adc2 = ads.readADC_SingleEnded(2);
-  adc3 = ads.readADC_SingleEnded(3);
+  // LEITURA DO CONVERSOR ANALOGICO
+  adc0 = ads.readADC_SingleEnded(SENSORAC_REDE);
+  adc1 = ads.readADC_SingleEnded(SENSORAC_CARGA);
+  adc2 = ads.readADC_SingleEnded(SENSORDC_BATERIA);
+  adc3 = ads.readADC_SingleEnded(SENSORDC_PLACASOLAR);
 
-  analogica = analogRead(0);
-  anlgc = analogica * (5.0 / 1023.0);
-  
-  ad0 = (adc0 * 0.1875)/1000;
-  ad1 = (adc1 * 0.1875)/1000;
-  ad2 = (adc2 * 0.1875)/1000;
-  ad3 = (adc3 * 0.1875)/1000;
+  // CALCULO PARA DADOS DO CONVERSOR AD
+  sensorAcRede = (adc0 * 0.1875)/1000;
+  sensorAcCarga = (adc1 * 0.1875)/1000;
+  sensorDcBateria = (adc2 * 0.1875)/1000;
+  sensorDcPlacaSolar = (adc3 * 0.1875)/1000;
   
   carga();
   carregamentoBateria();
@@ -196,31 +195,25 @@ void loop() {
   lcdBacklight();
   carga();
 
-  Serial.print("AIN0: "); 
+  Serial.print("SENSOR AC REDE: "); 
   Serial.print(adc0);
   Serial.print("\tVoltage: ");
-  Serial.println(ad0, 7);
+  Serial.println(sensorAcRede, 7);
 
-  Serial.print("AIN1: ");
+  Serial.print("SENSOR AC CARGA: ");
   Serial.print(adc1);
   Serial.print("\tVoltage: ");
-  Serial.println(ad1, 7);
+  Serial.println(sensorAcCarga, 7);
 
-  Serial.print("AIN2: ");
+  Serial.print("SENSOR DC BATERIA: ");
   Serial.print(adc2);
   Serial.print("\tVoltage: ");
-  Serial.println(ad2, 7);
+  Serial.println(sensorDcBateria, 7);
 
-  Serial.print("AIN3: ");
+  Serial.print("SENSOR DC PLACA SOLAR: ");
   Serial.print(adc3);
   Serial.print("\tVoltage: ");
-  Serial.println(ad3, 7);
-  Serial.println();
-
-  Serial.print("ANAG: ");
-  Serial.print(analogica);
-  Serial.print("\tVoltage: ");
-  Serial.println(anlgc, 7);
+  Serial.println(sensorDcPlacaSolar, 7);
   Serial.println();
   
   carga();
