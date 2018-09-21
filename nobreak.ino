@@ -81,7 +81,36 @@ void setup(void) {
   pinMode(RELE_CARREGAMENTOREDE, OUTPUT);
   pinMode(RELE_CARGA, OUTPUT);
   pinMode(RELE_EXAUSTOR, OUTPUT);
+
+
+cli();//stop interrupts
+  //set timer2 interrupt at 8kHz
+  TCCR2A = 0;// set entire TCCR2A register to 0
+  TCCR2B = 0;// same for TCCR2B
+  TCNT2  = 0;//initialize counter value to 0
+  // set compare match register for 8khz increments
+  OCR2A = 249;// = (16*10^6) / (8000*8) - 1 (must be <256)
+  // turn on CTC mode
+  TCCR2A |= (1 << WGM21);
+  // Set CS21 bit for 8 prescaler
+  TCCR2B |= (1 << CS21);   
+  // enable timer compare interrupt
+  TIMSK2 |= (1 << OCIE2A);
+sei();//allow interrupts
 }
+
+
+
+ISR(TIMER2_COMPA_vect) {
+  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
+    digitalWrite(6, HIGH);
+  } else {
+    digitalWrite(6, LOW);
+  }
+}
+
+
+
  
 void mostra_endereco_sensor(DeviceAddress deviceAddress) {
   for (uint8_t i = 0; i < 8; i++) {
@@ -91,14 +120,14 @@ void mostra_endereco_sensor(DeviceAddress deviceAddress) {
   }
 }
 
-void carga() {
+//void carga() {
   // Leitura tensao da placa DC e compara com valor fixo (18V)
-  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
-    digitalWrite(6, HIGH);
-  } else {
-    digitalWrite(6, LOW);
-  }
-}
+//  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
+//    digitalWrite(6, HIGH);
+//  } else {
+//    digitalWrite(6, LOW);
+//  }
+//}
 
 void carregamentoBateria() {
   // Carregamento da bateria Se tensao placa menor que XXXXX carrega pela rede
@@ -187,13 +216,10 @@ void loop() {
   sensorAcCarga = (adc1 * 0.1875)/1000;
   sensorDcBateria = (adc2 * 0.1875)/1000;
   sensorDcPlacaSolar = (adc3 * 0.1875)/1000;
-  
-  carga();
+
   carregamentoBateria();
-  carga();
   temperatura();
   lcdBacklight();
-  carga();
 
   Serial.print("SENSOR AC REDE: "); 
   Serial.print(adc0);
@@ -215,10 +241,7 @@ void loop() {
   Serial.print("\tVoltage: ");
   Serial.println(sensorDcPlacaSolar, 7);
   Serial.println();
-  
-  carga();
 
   carregamentoBateria();
 
-  carga();
 }
