@@ -1,10 +1,8 @@
 // Programa: TCC No-Break
-// Descricao do projeto
-
 
 // BIBLIOTECAS
 #include <Adafruit_ADS1015.h>  // Conversor AD
-#include <Wire.h>              //
+#include <Wire.h>              // Protocolo I2C
 #include <LiquidCrystal_I2C.h> // LCD I2C
 #include <OneWire.h>           // Comunicacao Sensor de Temperatura
 #include <DallasTemperature.h> // Sensor de Temperatura
@@ -12,7 +10,7 @@
 
 // DEFINICOES I/O
 // DIGITAIS
-#define BOTAO                 2 // In
+#define BOTAO                  2 // In
 #define SENSOR_TEMPERATURA     3 // In
 #define RELE_CARREGAMENTOPLACA 4 // Out
 #define RELE_CARREGAMENTOREDE  5 // Out
@@ -36,7 +34,9 @@ float tempMax = 0;
 float tempC = 0;
 
 
-int buttonState = 0; // Integra ate quatro
+int buttonState = 0; // Ate quatro
+boolean current_up = LOW;
+boolean last_up=LOW;
 
 
 // Variaveis para conversao AD
@@ -82,26 +82,20 @@ void setup(void) {
   pinMode(RELE_CARGA, OUTPUT);
   pinMode(RELE_EXAUSTOR, OUTPUT);
 
-
-cli();//stop interrupts
-  //set timer2 interrupt at 8kHz
-  TCCR2A = 0;// set entire TCCR2A register to 0
-  TCCR2B = 0;// same for TCCR2B
-  TCNT2  = 0;//initialize counter value to 0
-  // set compare match register for 8khz increments
-  OCR2A = 249;// = (16*10^6) / (8000*8) - 1 (must be <256)
-  // turn on CTC mode
-  TCCR2A |= (1 << WGM21);
-  // Set CS21 bit for 8 prescaler
-  TCCR2B |= (1 << CS21);   
-  // enable timer compare interrupt
-  TIMSK2 |= (1 << OCIE2A);
-sei();//allow interrupts
+  // Define o time interrupt para 8khz
+  cli();
+    TCCR2A = 0;
+    TCCR2B = 0;
+    TCNT2  = 0;
+    OCR2A = 249;             // = (16*10^6) / (8000*8) - 1 (deve ser menor < 256)
+    TCCR2A |= (1 << WGM21);
+    TCCR2B |= (1 << CS21);
+    TIMSK2 |= (1 << OCIE2A);
+  sei();
 }
 
-
-
 ISR(TIMER2_COMPA_vect) {
+  // Time interrupt
   if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
     digitalWrite(6, HIGH);
   } else {
@@ -109,9 +103,6 @@ ISR(TIMER2_COMPA_vect) {
   }
 }
 
-
-
- 
 void mostra_endereco_sensor(DeviceAddress deviceAddress) {
   for (uint8_t i = 0; i < 8; i++) {
     // Adiciona zeros se necessário
@@ -119,15 +110,6 @@ void mostra_endereco_sensor(DeviceAddress deviceAddress) {
     Serial.print(deviceAddress[i], HEX);
   }
 }
-
-//void carga() {
-  // Leitura tensao da placa DC e compara com valor fixo (18V)
-//  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
-//    digitalWrite(6, HIGH);
-//  } else {
-//    digitalWrite(6, LOW);
-//  }
-//}
 
 void carregamentoBateria() {
   // Carregamento da bateria Se tensao placa menor que XXXXX carrega pela rede
@@ -244,4 +226,14 @@ void loop() {
 
   carregamentoBateria();
 
+}
+
+// Paginacao de telas
+boolean debounce(boolean last, int pin) {
+  boolean current = digitalRead(pin);
+  if (last != current) {
+    delay(5);
+    current = digitalRead(pin);
+  }
+  return current;
 }
