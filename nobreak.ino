@@ -26,7 +26,7 @@
 
 // ENDERECOS I2C
 #define LCD_ADD 0x3f
-#define CONVERSORAD_ADD 0x48
+#define CONVERSORAD_ADD 0x4A
 
 // VARIAVEIS
 float tempMin = 999;
