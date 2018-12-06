@@ -81,26 +81,6 @@ void setup(void) {
   pinMode(RELE_CARREGAMENTOREDE, OUTPUT);
   pinMode(RELE_CARGA, OUTPUT);
   pinMode(RELE_EXAUSTOR, OUTPUT);
-
-  // Define o time interrupt para 8khz
-  cli();
-    TCCR2A = 0;
-    TCCR2B = 0;
-    TCNT2  = 0;
-    OCR2A = 249;             // = (16*10^6) / (8000*8) - 1 (deve ser menor < 256)
-    TCCR2A |= (1 << WGM21);
-    TCCR2B |= (1 << CS21);
-    TIMSK2 |= (1 << OCIE2A);
-  sei();
-}
-
-ISR(TIMER2_COMPA_vect) {
-  // Time interrupt
-  if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
-    digitalWrite(6, HIGH);
-  } else {
-    digitalWrite(6, LOW);
-  }
 }
 
 void mostra_endereco_sensor(DeviceAddress deviceAddress) {
@@ -224,16 +204,12 @@ void loop() {
   Serial.println(sensorDcPlacaSolar, 7);
   Serial.println();
 
+if (sensorDcPlacaSolar >= 2.5 || sensorAcRede < 0.6) {
+    digitalWrite(RELE_CARGA, HIGH);
+  } else {
+    digitalWrite(RELE_CARGA, LOW);
+  }
+  
   carregamentoBateria();
 
-}
-
-// Paginacao de telas
-boolean debounce(boolean last, int pin) {
-  boolean current = digitalRead(pin);
-  if (last != current) {
-    delay(5);
-    current = digitalRead(pin);
-  }
-  return current;
 }
